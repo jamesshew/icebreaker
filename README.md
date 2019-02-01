@@ -42,6 +42,8 @@ All NetNTLMv2 hashes which are captured in the techniques below are autocracked 
     * Add an administrative user - icebreaker:P@ssword123456
     * Run an obfuscated and AMSI bypassing version of Mimikatz
     * Mimikatz output is parsed for NTLM hashes and plaintext passwords
+    * Run an obfuscated and AMSI bypassing version of Invoke-PowerDump for SAM hashes 
+    * Output is parsed for NTLM hashes
 * IPv6 DNS poison
   * Uses mitm6 and ntlmrelayx.py to poison IPv6 DNS in order to capture NetNTLMv2 user hashes
   * Creates fake WPAD server with authentication
@@ -60,7 +62,7 @@ Attack 3 uses Responder.py to poison LLMNR, NBT-NS, and mDNS multicast/broadcast
 
 SMB relay is an old network attack where attackers place themselves inbetween the SMB client and the SMB server. This allows attackers to capture and relay NetNTLMv2 hashes to hosts that have SMBv1 enabled and SMB signing disabled. ntlmrelayx.py from the Impacket library is used to relay while Responder.py is used to man-in-the-middle SMB connections. Should the SMB client user have administrative rights to any host on the network that has SMB signing disabled, ntlmrelayx.py will perform command execution on that host. 
 
-Once ntlmrelayx relays a captured hash it will run a base64-encoded powershell command that first adds an administrative user (icebreaker:P@ssword123456) then runs an obfuscated and AMSI-bypassing version of Mimikatz. This mimikatz output is parsed for plaintext passwords or NTLM hashes and delivered to the user in the standard output as well as in the found-passwords.txt file. NTLM hashes, unlike NetNTLMv2 hashes, can be used just like a plaintext password for authentication to other AD hosts. The one caveat is that ever since Microsoft’s KB2871997 patch, only the builtin RID 500 local administrator account can be used in pass-the-hash attacks.
+Once ntlmrelayx relays a captured hash it will run a base64-encoded powershell command that first adds an administrative user (icebreaker:P@ssword123456) then runs an obfuscated and AMSI-bypassing version of Mimikatz, followed by an obfuscated and AMSI-bypassing version of Invoke-PowerDump. The output of Invoke-Mimikatz and Invoke-PowerDump is parsed for plaintext passwords or NTLM hashes and delivered to the user in the standard output as well as in the found-passwords.txt file. NTLM hashes, unlike NetNTLMv2 hashes, can be used just like a plaintext password for authentication to other AD hosts. The one caveat is that ever since Microsoft’s KB2871997 patch, only the builtin RID 500 local administrator account can be used in pass-the-hash attacks.
 
 The final attack uses the tool mitm6 to perform a man-in-the-middle IPv6 DNS attack against the whole network. This forces hosts on the network to use the attacker's machine as their DNS server. Once set as their DNS server, the attacker serves malicious WPAD proxy setting files to the victims and gathers their NetNTLMv2 hashes. These hashes are relayed using ntlmrelayx.py for further remote code execution possibilities. One thing to note is that this attack is prone to causing issues on the network. It often causes certificate errors on client machines in the browser. It'll also likely slow the network down. The beauty of this attack, however, is that Windows AD environments are vulnerable by default.
 
@@ -72,8 +74,22 @@ Password cracking is done with JohnTheRipper and a custom wordlist. The origin o
 As root:
 ```
 ./setup.sh
+pipenv install --three
 pipenv shell
 ```
+You might get an error after running pipenv install. Update to a version of pipenv higher than 11.9.0 if that is the case. You can git clone pipenv from github and just ```apt-get remove python-pipenv && python setup.py install``` from within the folder.
+
+### Docker Usage
+Still a few bugs to work out with the docker image so this is likely to error for you but it's almost there. From the Git Repo:
+```
+docker build --rm -t danmcinerney/icebreaker .
+docker run danmcinery/icebreaker
+```
+Or append the commands you'd normally add to icebreaker (don't forget to map volumes):
+```
+docker run -v $(pwd)/logs:/icebreaker/logs -v $(pwd)/hashes:/icebreaker/hashes -v $(pwd)/icebreaker-scan.xml:/icebreaker/icebreaker-scan.xml -v $(pwd)/submodules:/icebreaker/submodules -e PYTHONUNBUFFERED=0 danmcinerney/icebreaker -x icebreaker-scan.xml
+```
+**Note: You'll want to map ports for listeners with docker's `-p <host>:<container>` flag. 
 
 #### Usage
 Run as root.
